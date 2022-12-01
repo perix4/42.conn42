@@ -20,8 +20,6 @@ defmodule Conn42.MixProject do
 
   defp deps do
     [
-
-      {:plug, "~> 1.5"},
       {:plug_cowboy, "~> 2.2"}
     ]
   end

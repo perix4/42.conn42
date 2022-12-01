@@ -19,8 +19,6 @@ defmodule Conn42.Responder do
   end
 
   def handle_cast({:notify_sse, topic}, state) do
-    IO.inspect({state, Map.has_key?(state, topic)})
-
     if Map.has_key?(state, topic) do
       {:noreply, state}
     else
@@ -32,26 +30,28 @@ defmodule Conn42.Responder do
   def handle_info({:sse_ping, topic}, state) do
     iteration = Map.get(state, topic)
 
-    case iteration do
-      nil ->
-        {:noreply, state}
+    dispatch(iteration, topic)
 
-      0 ->
-        Registry.dispatch(Conn42.Registry, topic, fn entries ->
-          for {pid, _} <- entries, do: send(pid, {:exit, format_sse("bye bye #{inspect(pid)}")})
-        end)
-
-      num ->
-        Registry.dispatch(Conn42.Registry, topic, fn entries ->
-          for {pid, _} <- entries do
-            send(pid, {:msg, format_sse(num)})
-          end
-        end)
-
-        Process.send_after(self(), {:sse_ping, topic}, 1000)
+    if iteration == 0 do
+      {:noreply, Map.delete(state, topic)}
+    else
+      Process.send_after(self(), {:sse_ping, topic}, 1000)
+      {:noreply, Map.put(state, topic, iteration - 1)}
     end
+  end
 
-    {:noreply, Map.put(state, topic, iteration - 1)}
+  def dispatch(num, topic) do
+    sse_msg =
+      case num do
+        0 -> {:exit, format_sse("bye bye")}
+        num -> {:msg, format_sse(num)}
+      end
+
+    Registry.dispatch(Conn42.Registry, topic, fn entries ->
+      for {pid, _} <- entries do
+        send(pid, sse_msg)
+      end
+    end)
   end
 
   def format_sse(num) when is_number(num) do
